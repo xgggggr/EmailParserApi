@@ -9,7 +9,7 @@ class EmailCreate(BaseModel):
     subject: str | None = Field(default = None, min_length=1)
     body: str | None = Field(default = None, min_length=1)
 
-class CategoryRead(BaseModel):
+class CategoryResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -23,7 +23,7 @@ class EmailResponse(BaseModel):
     who_sent: EmailStr
     subject: str | None
     body: str | None = Field(min_length=1)
-    category: CategoryRead
+    category: CategoryResponse
     matched_keywords: list[str]
     email_created: datetime
     filename: str | None = Field(default=None, min_length=1)

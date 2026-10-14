@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from app import models
 from app.logic.classificator import Classificator
-from app.schemas.email import ClassificatorResult, EmailCreate, EmailResponse
+from app.schemas.email import ClassificatorResult, EmailCreate, EmailResponse, EmailUpdate, CategoryResponse
 from sqlalchemy.orm import Session
 import app.models
 from app.database import Base, engine, get_db, SessionLocal
@@ -52,3 +52,31 @@ def get_email(email_id: int, db: Annotated[Session, Depends(get_db)]):
     if email:
         return email
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email not found")
+
+@app.patch('/api/emails/{email_id}', response_model=EmailResponse)
+def change_category_of_email(email_id: int,email_data: EmailUpdate, db: Annotated[Session, Depends(get_db)]):
+    result = db.execute(select(models.Email).where(models.Email.id == email_id))
+    email = result.scalars().first()
+    if not email:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email not found")
+    category = db.execute(select(models.Category).where(models.Category.name == email_data.category)).scalars().first()
+    if not category:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=f"Нет категории {email_data.category}")
+    email.category = category
+    db.commit()
+    db.refresh(email)
+    return email
+
+@app.delete('/api/emails/{email_id}', status_code=status.HTTP_204_NO_CONTENT)
+def delete_email(email_id: int, db: Annotated[Session, Depends(get_db)]):
+    result = db.execute(select(models.Email).where(models.Email.id == email_id))
+    email = result.scalars().first()
+    if not email:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email not found")
+    db.delete(email)
+    db.commit()
+@app.get('/api/categories', response_model=list[CategoryResponse])
+def get_categories(db: Annotated[Session, Depends(get_db)]):
+    result = db.execute(select(models.Category).order_by(models.Category.id))
+    categories = result.scalars().all()
+    return categories
