@@ -1,5 +1,5 @@
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Category
 
@@ -14,9 +14,9 @@ CATEGORY_DESCRIPTIONS = {"spam": "Спам и фишинг",
                         "unknown": "Не удалось определить категорию",
                         "corrupted": "Нечитаемые файлы",}
 
-def seed_categories(session: Session) -> None:
-    existing = set(session.scalars(select(Category.name)))
+async def seed_categories(session: AsyncSession) -> None:
+    existing = set((await session.scalars(select(Category.name))).all())
     for name, description in CATEGORY_DESCRIPTIONS.items():
         if name not in existing:
             session.add(Category(name=name, description=description))
-    session.commit()
+    await session.commit()

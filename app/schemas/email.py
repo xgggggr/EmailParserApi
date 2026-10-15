@@ -1,9 +1,6 @@
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, EmailStr
 
-from app.models import Category
-
-
 class EmailCreate(BaseModel):
     who_sent: EmailStr | None = None
     subject: str | None = Field(default = None, min_length=1)
@@ -20,7 +17,7 @@ class CategoryResponse(BaseModel):
 class EmailResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
-    who_sent: EmailStr
+    who_sent: EmailStr | None
     subject: str | None
     body: str | None = Field(min_length=1)
     category: CategoryResponse
@@ -33,10 +30,3 @@ class EmailResponse(BaseModel):
 
 class EmailUpdate(BaseModel):
     category: str
-
-
-
-
-class ClassificatorResult(BaseModel):
-    category: str
-    match_keywords: list[str]

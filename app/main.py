@@ -7,18 +7,21 @@ from sqlalchemy import select
 
 from app import models
 from app.logic.classificator import Classificator
-from app.schemas.email import ClassificatorResult, EmailCreate, EmailResponse, EmailUpdate, CategoryResponse
-from sqlalchemy.orm import Session
+from app.schemas.email import EmailCreate, EmailResponse, EmailUpdate, CategoryResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 import app.models
-from app.database import Base, engine, get_db, SessionLocal
+from app.database import Base, engine, get_db, AsyncSessionLocal
 from app.seed import seed_categories
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(engine)
-    with SessionLocal() as session:
-        seed_categories(session)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    async with AsyncSessionLocal() as session:
+        await seed_categories(session)
     yield
+    await engine.dispose()
 
 app = FastAPI(title="Email Parser API", lifespan=lifespan)
 classifier = Classificator()
@@ -28,55 +31,56 @@ classifier = Classificator()
 def healthcheck():
     return {'status': 'ok'}
 
-@app.post('/api/emails', response_model=EmailResponse)
-def classify_email(email: EmailCreate, db: Annotated[Session, Depends(get_db)]):
+@app.post('/api/emails', response_model=EmailResponse, status_code=status.HTTP_201_CREATED)
+async def classify_email(email: EmailCreate, db: Annotated[AsyncSession, Depends(get_db)]):
     category_name, keywords = classifier.categorise(email.subject, email.body)
-    result = db.execute(select(models.Category).where(models.Category.name == category_name))
+    result = await db.execute(select(models.Category).where(models.Category.name == category_name))
     category = result.scalars().first()
     email = models.Email(who_sent = email.who_sent, subject = email.subject, body = email.body, matched_keywords = keywords, category = category)
     db.add(email)
-    db.commit()
-    db.refresh(email)
+    await db.commit()
+    await db.refresh(email)
     return email
 
 @app.get('/api/emails', response_model=list[EmailResponse])
-def get_all_emails(db: Annotated[Session, Depends(get_db)]):
-    result = db.execute(select(models.Email))
+async def get_all_emails(db: Annotated[AsyncSession, Depends(get_db)]):
+    result = await db.execute(select(models.Email))
     emails = result.scalars().all()
     return emails
 
 @app.get('/api/emails/{email_id}', response_model=EmailResponse)
-def get_email(email_id: int, db: Annotated[Session, Depends(get_db)]):
-    result = db.execute(select(models.Email).where(models.Email.id == email_id),)
+async def get_email(email_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
+    result = await db.execute(select(models.Email).where(models.Email.id == email_id),)
     email = result.scalars().first()
     if email:
         return email
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email not found")
 
 @app.patch('/api/emails/{email_id}', response_model=EmailResponse)
-def change_category_of_email(email_id: int,email_data: EmailUpdate, db: Annotated[Session, Depends(get_db)]):
-    result = db.execute(select(models.Email).where(models.Email.id == email_id))
+async def change_category_of_email(email_id: int,email_data: EmailUpdate, db: Annotated[AsyncSession, Depends(get_db)]):
+    result = await db.execute(select(models.Email).where(models.Email.id == email_id))
     email = result.scalars().first()
     if not email:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email not found")
-    category = db.execute(select(models.Category).where(models.Category.name == email_data.category)).scalars().first()
+    result2 =  await db.execute(select(models.Category).where(models.Category.name == email_data.category))
+    category = result2.scalars().first()
     if not category:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=f"Нет категории {email_data.category}")
     email.category = category
-    db.commit()
-    db.refresh(email)
+    await db.commit()
+    await db.refresh(email)
     return email
 
 @app.delete('/api/emails/{email_id}', status_code=status.HTTP_204_NO_CONTENT)
-def delete_email(email_id: int, db: Annotated[Session, Depends(get_db)]):
-    result = db.execute(select(models.Email).where(models.Email.id == email_id))
+async def delete_email(email_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
+    result = await db.execute(select(models.Email).where(models.Email.id == email_id))
     email = result.scalars().first()
     if not email:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email not found")
-    db.delete(email)
-    db.commit()
+    await db.delete(email)
+    await db.commit()
 @app.get('/api/categories', response_model=list[CategoryResponse])
-def get_categories(db: Annotated[Session, Depends(get_db)]):
-    result = db.execute(select(models.Category).order_by(models.Category.id))
+async def get_categories(db: Annotated[AsyncSession, Depends(get_db)]):
+    result = await db.execute(select(models.Category).order_by(models.Category.id))
     categories = result.scalars().all()
     return categories

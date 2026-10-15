@@ -19,7 +19,7 @@ class Email(Base):
     __tablename__ = 'email'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    who_sent: Mapped[str] = mapped_column(String(50))
+    who_sent: Mapped[str | None] = mapped_column(String(50))
     subject: Mapped[str | None] = mapped_column(Text)
     body: Mapped[str | None] = mapped_column(Text)
     category_id: Mapped[int] = mapped_column(Integer, ForeignKey("categories.id"), nullable=False, index=True)
