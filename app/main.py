@@ -1,18 +1,11 @@
 from contextlib import asynccontextmanager
-from typing import Annotated
-
-from fastapi import FastAPI, Depends, HTTPException, status
-from sqlalchemy import select
-
+from fastapi import FastAPI
 
 from app import models
-from app.logic.classificator import Classificator
-from app.schemas.email import EmailCreate, EmailResponse, EmailUpdate, CategoryResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 import app.models
-from app.database import Base, engine, get_db, AsyncSessionLocal
+from app.database import Base, engine, AsyncSessionLocal
 from app.seed import seed_categories
-
+from app.routers import emails, health, categories, stats
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
@@ -24,63 +17,8 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
 
 app = FastAPI(title="Email Parser API", lifespan=lifespan)
-classifier = Classificator()
+app.include_router(health.router, prefix="/api/health", tags=["health"])
+app.include_router(categories.router, prefix="/api/categories", tags=["categories"])
+app.include_router(stats.router, prefix="/api/stats", tags=["stats"])
+app.include_router(emails.router, prefix="/api/emails", tags=["emails"])
 
-
-@app.get('/healthcheck')
-def healthcheck():
-    return {'status': 'ok'}
-
-@app.post('/api/emails', response_model=EmailResponse, status_code=status.HTTP_201_CREATED)
-async def classify_email(email: EmailCreate, db: Annotated[AsyncSession, Depends(get_db)]):
-    category_name, keywords = classifier.categorise(email.subject, email.body)
-    result = await db.execute(select(models.Category).where(models.Category.name == category_name))
-    category = result.scalars().first()
-    email = models.Email(who_sent = email.who_sent, subject = email.subject, body = email.body, matched_keywords = keywords, category = category)
-    db.add(email)
-    await db.commit()
-    await db.refresh(email)
-    return email
-
-@app.get('/api/emails', response_model=list[EmailResponse])
-async def get_all_emails(db: Annotated[AsyncSession, Depends(get_db)]):
-    result = await db.execute(select(models.Email))
-    emails = result.scalars().all()
-    return emails
-
-@app.get('/api/emails/{email_id}', response_model=EmailResponse)
-async def get_email(email_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
-    result = await db.execute(select(models.Email).where(models.Email.id == email_id),)
-    email = result.scalars().first()
-    if email:
-        return email
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email not found")
-
-@app.patch('/api/emails/{email_id}', response_model=EmailResponse)
-async def change_category_of_email(email_id: int,email_data: EmailUpdate, db: Annotated[AsyncSession, Depends(get_db)]):
-    result = await db.execute(select(models.Email).where(models.Email.id == email_id))
-    email = result.scalars().first()
-    if not email:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email not found")
-    result2 =  await db.execute(select(models.Category).where(models.Category.name == email_data.category))
-    category = result2.scalars().first()
-    if not category:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=f"Нет категории {email_data.category}")
-    email.category = category
-    await db.commit()
-    await db.refresh(email)
-    return email
-
-@app.delete('/api/emails/{email_id}', status_code=status.HTTP_204_NO_CONTENT)
-async def delete_email(email_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
-    result = await db.execute(select(models.Email).where(models.Email.id == email_id))
-    email = result.scalars().first()
-    if not email:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email not found")
-    await db.delete(email)
-    await db.commit()
-@app.get('/api/categories', response_model=list[CategoryResponse])
-async def get_categories(db: Annotated[AsyncSession, Depends(get_db)]):
-    result = await db.execute(select(models.Category).order_by(models.Category.id))
-    categories = result.scalars().all()
-    return categories

@@ -6,5 +6,7 @@ class Settings(BaseSettings):
 
     database_url: str
 
+    max_file_size: int = 1024*1024
 
+    allowed_extensions: set[str] = {'.txt', '.json', ''}
 settings = Settings()

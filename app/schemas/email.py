@@ -2,7 +2,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, EmailStr
 
 class EmailCreate(BaseModel):
-    who_sent: EmailStr | None = None
+    who_sent: str | None = None
     subject: str | None = Field(default = None, min_length=1)
     body: str | None = Field(default = None, min_length=1)
 
@@ -17,7 +17,7 @@ class CategoryResponse(BaseModel):
 class EmailResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
-    who_sent: EmailStr | None
+    who_sent: str | None
     subject: str | None
     body: str | None = Field(min_length=1)
     category: CategoryResponse
