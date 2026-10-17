@@ -9,7 +9,7 @@ from sqlalchemy import select
 from app import models
 from app.logic.classificator import Classificator
 
-from app.schemas.email import EmailCreate, EmailResponse, EmailUpdate
+from app.schemas.email import EmailCreate, EmailResponse, EmailUpdate, EmailPage
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.config import settings
@@ -19,7 +19,7 @@ router = APIRouter()
 classifier = Classificator()
 parser = EmailParsing()
 BinaryFile = Annotated[UploadFile, WithJsonSchema({"type": "string", "format": "binary"})]
-@router.post('/api/emails', response_model=EmailResponse, status_code=status.HTTP_201_CREATED)
+@router.post('', response_model=EmailResponse, status_code=status.HTTP_201_CREATED)
 async def classify_email(email: EmailCreate, db: Annotated[AsyncSession, Depends(get_db)]):
     category_name, keywords = classifier.categorise(email.subject, email.body)
     result = await db.execute(select(models.Category).where(models.Category.name == category_name))
@@ -30,11 +30,21 @@ async def classify_email(email: EmailCreate, db: Annotated[AsyncSession, Depends
     await db.refresh(email)
     return email
 
-@router.get('', response_model=list[EmailResponse])
-async def get_all_emails(db: Annotated[AsyncSession, Depends(get_db)]):
-    result = await db.execute(select(models.Email))
-    emails = result.scalars().all()
-    return emails
+from fastapi import Query
+from sqlalchemy import func
+
+
+@router.get("", response_model=EmailPage)
+async def list_emails(db: AsyncSession = Depends(get_db), category: str | None = None, limit: int = Query(20, ge=1, le=100), offset: int = Query(0, ge=0),):
+    query = select(models.Email)
+    count_query = select(func.count(models.Email.id))
+    if category:
+        query = query.join(models.Category).where(models.Category.name == category)
+        count_query = count_query.join(models.Category).where(models.Category.name == category)
+
+    total = await db.scalar(count_query)
+    result = await db.scalars(query.order_by(models.Email.email_created.desc()).limit(limit).offset(offset))
+    return {"items": result.all(), "total": total, "limit": limit, "offset": offset}
 
 @router.get('/{email_id}', response_model=EmailResponse)
 async def get_email(email_id: int, db: Annotated[AsyncSession, Depends(get_db)]):

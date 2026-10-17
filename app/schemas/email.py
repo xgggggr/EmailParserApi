@@ -19,7 +19,7 @@ class EmailResponse(BaseModel):
     id: int
     who_sent: str | None
     subject: str | None
-    body: str | None = Field(min_length=1)
+    body: str | None
     category: CategoryResponse
     matched_keywords: list[str]
     email_created: datetime
@@ -30,3 +30,9 @@ class EmailResponse(BaseModel):
 
 class EmailUpdate(BaseModel):
     category: str
+
+class EmailPage(BaseModel):
+    items: list[EmailResponse]
+    total: int
+    limit: int
+    offset: int

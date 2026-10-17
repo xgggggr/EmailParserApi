@@ -15,7 +15,7 @@ router = APIRouter()
 
 
 
-@router.get('/api/categories', response_model=list[CategoryResponse])
+@router.get('', response_model=list[CategoryResponse])
 async def get_categories(db: Annotated[AsyncSession, Depends(get_db)]):
     result = await db.execute(select(models.Category).order_by(models.Category.id))
     categories = result.scalars().all()
